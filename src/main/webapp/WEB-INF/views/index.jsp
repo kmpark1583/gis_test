@@ -21,6 +21,9 @@
                 closer
             };
 
+            // 초기 ZOOM LEVEL 셋팅
+            $("#zoomLevel").val("ZOOM : " + mapZoom);
+
             // 지도 셋팅
             mapSettingFn(popupObj);
 
@@ -38,6 +41,11 @@
     <div id="map_popup" class="ol-popup">
         <a href="javascript:void(0)" id="map_popup_closer" class="ol-popup-closer"></a>
         <div id="map_popup_content"></div>
+    </div>
+    <div>
+        Zoom Level <input type="text" id="zoomLevel" readonly>
+        경도 <input type="text" id="lon" readonly>
+        위도 <input type="text" id="lat" readonly>
     </div>
     <div>
         레이어 목록

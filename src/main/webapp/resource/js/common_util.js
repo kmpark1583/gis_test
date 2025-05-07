@@ -2,10 +2,11 @@
  * 공통 모듈
  */
 let map;
+let mapZoom = 11;
 let wms;
 let markerSource = new ol.source.Vector();
 let markerLayer;
-let poliArr = [];
+let polyArr = [];
 let layersInfoArr = [
     {
         name : "shp_test1", // shp 파일로 올린 레이어
@@ -24,9 +25,9 @@ function mapSettingFn(obj) {
         element: obj.container,
         autoPan: {
             animation: {
-                duration: 250,
-            },
-        },
+                duration: 250
+            }
+        }
     });
 
     // 팝업 닫기 버튼 클릭 이벤트
@@ -39,24 +40,31 @@ function mapSettingFn(obj) {
         target: 'map_div',
         layers: [
             new ol.layer.Tile({
-                source: new ol.source.OSM()
+                source: new ol.source.OSM({
+                    // 브이월드 API 인증키 발급 (만료일 : 2025-11-07)
+                    url : "https://api.vworld.kr/req/wmts/1.0.0/CDD5436C-0C9D-3858-BC9C-C1A60F4673F9/Base/{z}/{y}/{x}.png"
+                })
             })
         ],
         overlays: [overlay],
         view: new ol.View({
-            center: ol.proj.fromLonLat([129, 35.5]),  // 맵이 로딩되었을 때 보여질 기본 위치(좌표) 설정
-            zoom: 7  // 줌 레벨은 말 그대로 확대 레벨 (숫자가 커질수록 확대 됨
+            center: ol.proj.fromLonLat([126.835, 35.165]),
+            minZoom : 7,
+            maxZoom : 20,
+            zoom: mapZoom
         })
     });
 
-    // singleclick 시 팝업 띄우기
-    map.on('singleclick', function (evt) {
+    // singleclick 시 팝업 띄우기 (더블클릭 할 경우에는 이벤트 생략)
+    map.on('singleclick', function(e) {
         const type = $("#clickEventSelect").val();
-        const coordinate = evt.coordinate;
+        const coordinate = e.coordinate;
 
         if(type === "popupOption") {
             // 팝업창 열기
-            obj.content.innerHTML = `<p>클릭 위치</p><code>${coordinate[0]}, ${coordinate[1]}</code>`
+            const transCoordinate = ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326');
+
+            obj.content.innerHTML = `<p>클릭 위치</p><code>${transCoordinate[0]}, ${transCoordinate[1]}</code>`
             overlay.setPosition(coordinate);
 
         } else {
@@ -75,17 +83,15 @@ function mapSettingFn(obj) {
                         opacity: 1,  // 투명도 1=100%
                         scale: 0.01, // 크기 1=100%
                         src: '/resource/img/marker.png'
-                    }),
-                    //html의 css, z-index 기능이다.
-                    zindex: 10
+                    })
                 });
 
             } else {
                 // 폴리선 그리기
-                poliArr.push([coordinate[0], coordinate[1]]);
+                polyArr.push([coordinate[0], coordinate[1]]);
 
                 feature = new ol.Feature({
-                    geometry: new ol.geom.LineString(poliArr)
+                    geometry: new ol.geom.LineString(polyArr)
                 });
             }
 
@@ -98,6 +104,22 @@ function mapSettingFn(obj) {
 
             map.addLayer(markerLayer);
         }
+    });
+
+    map.on("moveend", function() {
+        // 줌의 변화가 생겼을 경우
+        const newZoom = map.getView().getZoom();
+        if(mapZoom !== newZoom) {
+            mapZoom = newZoom;
+            $("#zoomLevel").val(mapZoom);
+        }
+    });
+
+    // 마우스가 위치한 좌표 표시
+    map.on("pointermove", function(e) {
+        const coordinate = ol.proj.transform(e.coordinate, 'EPSG:3857', 'EPSG:4326');
+        $("#lon").val(coordinate[0]);
+        $("#lat").val(coordinate[1]);
     });
 }
 
@@ -175,5 +197,5 @@ function clickEventClearFn() {
     if(markerLayer != null) {
         markerLayer.getSource().clear();
     }
-    poliArr = [];
+    polyArr = [];
 }
