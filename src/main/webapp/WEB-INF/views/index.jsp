@@ -27,8 +27,8 @@
             // 지도 셋팅
             mapSettingFn(popupObj);
 
-            // 표시할 레이어 목록 셋팅
-            layerListSettingFn();
+            // 표시할 wms 레이어 목록 셋팅
+            wmsListSettingFn();
         });
 
     </script>
@@ -52,9 +52,9 @@
         <select id="layerSelect"></select>
     </div>
     <div>
-        <button onclick="layerDisplayFn(this);" data-type="show">레이어 표시</button>
-        <button onclick="layerDisplayFn(this);" data-type="hide">레이어 미표시</button>
-        <button onclick="layerDisplayFn(this);" data-type="allHide">레이어 모두 미표시</button>
+        <button onclick="wmsDisplayFn(this);" data-type="show">레이어 표시</button>
+        <button onclick="wmsDisplayFn(this);" data-type="hide">레이어 미표시</button>
+        <button onclick="wmsDisplayFn(this);" data-type="allHide">레이어 모두 미표시</button>
     </div>
     <div>
         클릭 이벤트
