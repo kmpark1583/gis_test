@@ -3,15 +3,19 @@ let mapZoom = 11;   // zoom 레벨 기본값
 let wms;                    // 이미지 기반의 wms 레이어 정보를 담을 변수
 let vectorSource = new ol.source.Vector();  // 벡터
 let vectorLayer;            // 마커,선 등과 같은 feature 요소를 표시하기 위한 벡터 레이어
-let polyArr = [];     // 폴리선을 그리기 위한 좌표를 담을 배열
+let LineStringArr = [];     // 선을 그리기 위한 좌표를 담을 배열
 let wmsArr = [  // 지오서버에 올라간 이미지 기반의 wms 레이어 목록 정보를 담은 배열
-    {   // shp 파일로 올린 레이어
+    {   // shp 파일로 올린 레이어 (광주 GIS)
         name : "shp_test1",     // 레이어 관리를 위한 레이어 명칭
         bbox : [168565.205, 272955.5300063771, 201286.76220000055, 295326.1299910848]   // 좌표
     },
-    {   // postGIS로 올린 레이어
+    {   // postGIS로 올린 레이어 (광주 GIS)
         name : "wtl_meta_ps",   // 레이어 관리를 위한 레이어 명칭
         bbox : [168651.765625, 272956.15625, 201060.578125, 295331] // 좌표
+    },
+    {   // postGIS로 올린 레이어 (전국 GIS)
+        name : "ctprvn",   // 레이어 관리를 위한 레이어 명칭
+        bbox : [746110.25, 1458754.0, 1387949.625, 2068444.0] // 좌표
     }
 ];
 
@@ -47,7 +51,6 @@ function mapSettingFn(obj) {
                 })
             })
         ],
-        type : "base",  // 일반 지도, midnight = 야간, sotellite = 위성 (생략시 base)
         overlays: [overlay],    // 설정한 맵에 표시할 overlay 요소 추가
         view: new ol.View({
             center: ol.proj.fromLonLat([126.835, 35.165]),  // 최초 표시될 지도의 중앙 좌표
@@ -66,10 +69,55 @@ function mapSettingFn(obj) {
 
         // 클릭 이벤트가 팝업 열기 일 경우
         if(type === "popupOption") {
-            // 받아온 좌표의 좌표계를 변경
-            const transCoordinate = ol.proj.transform(coordinate, "EPSG:3857", "EPSG:4326");
-            // 팝업 요소의 HTML을 변경
-            obj.content.innerHTML = `<p>클릭 위치</p><code>${transCoordinate[0]}, ${transCoordinate[1]}</code>`
+            // 선택된 wms 레이어 조회
+            let arr = selectWmsLayerObjFn(wmsArr, $("#layerSelect").val());
+            // 해당 지점의 좌표or정보 표시 구분을 위한 변수
+            let text;
+
+            // 레이어 목록에서 특정 레이어가 선택 되어 있을 경우
+            if(arr.length > 0) {
+                let obj = arr[0];
+                // 선택된 레이어가 지도에 표시 되어 있다면
+                if(obj.wmsSource) {
+                    // wms 레이어의 클릭한 feature 요소 정보를 url로 가져옴
+                    let url = obj.wmsSource.getFeatureInfoUrl(e.coordinate, map.getView().getResolution(), map.getView().getProjection(), {
+                        QUERY_LAYERS: obj.wmsSource.getParams().LAYERS, // 저장소:레이어명
+                        INFO_FORMAT: 'application/json',   // 출력물 포맷 : json
+                    });
+
+                    if(url) {
+                        $.ajax(url, {
+                            type: "GET",
+                            async: false,   // 해당 클릭 지점의 표시 정보를 분기처리 하기 위해 동기 방식으로 변경
+                        }).done(function(data,status,response) {
+                            // 클릭한 feature의 정보 조회
+                            data = data.features;
+                            // 클릭한 지점의 정보가 존재 할 경우
+                            if(data.length > 0) {
+                                let properties = data[0].properties;
+                                // 클릭지점의 정확한 위치를 찾을 수 있다면 해당 정보 표시
+                                if(properties != null) {
+                                    // 연습한다고 다른 shp 파일도 추가했는데 각 레이어마다 컬럼명이 달라서..
+                                    text = `<p>클릭위치</p><code></code>${properties.ctp_kor_nm ? properties.ctp_kor_nm : properties.blk_nam}`;
+                                }
+                            }
+
+                        }).error(function(e) {
+                            console.log(e);
+                        });
+                    }
+                }
+            }
+
+            // 클릭한 지점의 정확한 정보를 찾을 수 업다면 해당 지점의 좌표 셋팅
+            if(!text) {
+                // 받아온 좌표의 좌표계를 변경후 셋팅
+                const transCoordinate = ol.proj.transform(coordinate, "EPSG:3857", "EPSG:4326");
+                text = `<p>클릭 위치</p><code>${transCoordinate[0]}, ${transCoordinate[1]}</code>`;
+            }
+
+            // 팝업 요소의 HTML을 클릭한 셋팅한 정보로 셋팅
+            obj.content.innerHTML = text;
             // overlay 요소의 포지션을 해당 좌표로 설정
             overlay.setPosition(coordinate);
 
@@ -89,17 +137,18 @@ function mapSettingFn(obj) {
                 markerStyle = new ol.style.Style({
                     image: new ol.style.Icon({  // 마커 이미지 설정
                         opacity: 1,  // 투명도 1 = 100%
-                        scale: 0.01, // 크기 1 = 100%
+                        scale: 0.03, // 크기 1 = 100%
                         src: '/resource/img/marker.png' // 마커 이미지 경로
                     })
                 });
-            // 클릭 이벤트가 폴리선 일 경우
+
+            // 클릭 이벤트가 선 일 경우
             } else {
-                // 배열에 폴리선을 그릴 좌표를 저장
-                polyArr.push([coordinate[0], coordinate[1]]);
-                // 폴리선이 그려지기 위한 선 feature 정보 셋팅
+                // 배열에 선을 그릴 좌표를 저장
+                LineStringArr.push([coordinate[0], coordinate[1]]);
+                // 선이 그려지기 위한 선 feature 정보 셋팅
                 feature = new ol.Feature({
-                    geometry: new ol.geom.LineString(polyArr)
+                    geometry: new ol.geom.LineString(LineStringArr)
                 });
             }
             // 벡터에 feature 정보 추가
@@ -159,49 +208,54 @@ function wmsDisplayFn(obj) {
     let name = $("#layerSelect").val();
     // 지도의 레이어 목록
     let layersArray = map.getLayers().getArray();
+    // 레이어 목록 저장용 변수
+    let arr;
 
     // 버튼 타입별 레이어 표시 여부 변경
-    switch(type) {
-        // 레이어 표시 일 경우
-        case 'show':
-            // 레이어 선택 여부 조회
-            if(name === "") {
-                // 선택된 레이어가 없을 경우 alert 창 띄우고 종료
-                alert("표시할 레이어를 선택해주세요.");
-                return;
-            }
-            // 지도 내 해당 레이어 이름을 가진 wms 레이어 갯수 조회
-            let length = layersArray.filter(x => x.get("name") === name).length;
-            // 존재 하지 않을 경우에만
-            if(length === 0) {
-                // wms 레이어 정보 셋팅
-                layerSettingFn(name);
-                // 셋팅된 wms 레이어 정보를 지도에 추가
-                map.addLayer(wms);
-                // wms 레이어 정보 null 값으로 초기화
-                wms = null;
-            }
-            break;
-        // 레이어 미표시 일 경우
-        case 'hide':
-            // 지도 내 해당 레이어 이름을 가진 wms 레이어를 찾아서 제거
-            layersArray
-                .filter(x => x.get("name") === name)
-                .forEach(x => map.removeLayer(x));
-            break;
-        // 레이어 모두 미표시 일 경우
-        case 'allHide' :
-            // 지도 내 null값이 아닌 모든 wms 레이어 제거
-            layersArray
-                .filter(x => x.get("name") != null)
-                .forEach(x => map.removeLayer(x));
+    if(type === "show") {
+        // 레이어 선택 여부 조회
+        if(name === "") {
+            // 선택된 레이어가 없을 경우 alert 창 띄우고 종료
+            alert("표시할 레이어를 선택해주세요.");
+            return;
+        }
+        arr = selectWmsLayerObjFn(layersArray, name);
+        // 존재 하지 않을 경우에만
+        if(arr.length === 0) {
+            // wms 레이어 정보 셋팅
+            layerSettingFn(name);
+            // 셋팅된 wms 레이어 정보를 지도에 추가
+            map.addLayer(wms);
+            // wms 레이어 정보 null 값으로 초기화
+            wms = null;
+        }
+
+    } else {
+        // 특정 레이어 미표시
+        if(type === "hide") {
+            arr = selectWmsLayerObjFn(layersArray, name);
+        // 모든 레이어 미표시
+        } else {
+            arr = selectWmsLayerObjFn(layersArray, null, false);
+        }
+
+        arr.forEach(x => {
+            // 최종적으로 삭제 해야할 레이어 지도에서 제거
+            map.removeLayer(x);
+            wmsArr.forEach(y => {
+                if(x.get("name") === y.name) {
+                    // wms 레이어 목록에서 셋팅된 객체 내 wms 정보 제거
+                    delete y.wmsSource;
+                }
+            });
+        });
     }
 }
 
 /** 레이어 셋팅 **/
 function layerSettingFn(name) {
     // wms 레이어 목록 중 name 값이 선택된 레이어와 동일한 객체를 조회
-    let obj = wmsArr.filter(x => x.name === name)[0];
+    let obj = selectWmsLayerObjFn(wmsArr, name)[0];
     // wms 레이어 정보 셋팅
     wms = new ol.layer.Tile({
         source : new ol.source.TileWMS({
@@ -217,6 +271,7 @@ function layerSettingFn(name) {
         }),
         name : name // 레이어 명칭
     });
+    obj.wmsSource = wms.getSource();
 }
 
 /** 지도 클릭 이벤트 초기화 **/
@@ -228,6 +283,21 @@ function clickEventClearFn() {
         // 모두 지우기
         vectorLayer.getSource().clear();
     }
-    // 폴리선용 좌표 배열 초기화
-    polyArr = [];
+    // 선 좌표 배열 초기화
+    LineStringArr = [];
+}
+
+/** wms 레이어 목록중 찾고자 하는 레이어 목록 조회 **/
+function selectWmsLayerObjFn(arr, name, bool=true) {
+    // 결과값을 담을 변수
+    let result;
+
+    // 동일한 명칭의 레이어를 찾고자 하는 경우
+    if(bool) {
+        result = arr.filter(x => x.name == null ? x.get("name") === name : x.name === name);
+    // 일치하지 않는 레이어를 찾고자 하는 경우
+    } else {
+        result = arr.filter(x => x.name == null ? x.get("name") != name : x.name != name);
+    }
+    return result;
 }

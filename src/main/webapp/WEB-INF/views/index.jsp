@@ -61,7 +61,7 @@
         <select id="clickEventSelect" onchange="clickEventClearFn();">
             <option value="popupOption">팝업</option>
             <option value="markerOption">마커</option>
-            <option value="polyOption">폴리라인</option>
+            <option value="lineOption">선</option>
         </select>
     </div>
 </body>
