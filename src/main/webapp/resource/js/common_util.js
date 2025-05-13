@@ -1,9 +1,9 @@
 let map;                    // 화면에 표시될 지도 정보를 담을 변수
 let mapZoom = 11;   // zoom 레벨 기본값
 let wms;                    // 이미지 기반의 wms 레이어 정보를 담을 변수
-let vectorSource = new ol.source.Vector();  // 벡터
-let vectorLayer;            // 마커,선 등과 같은 feature 요소를 표시하기 위한 벡터 레이어
-let LineStringArr = [];     // 선을 그리기 위한 좌표를 담을 배열
+let vectorSource;           // 벡터
+let coordinateSetBool = false;  // feature 좌표 셋팅 완료 여부
+let customFeatureArr = [];     // 커스텀 feature을 그리기 위한 좌표를 담을 배열
 let wmsArr = [  // 지오서버에 올라간 이미지 기반의 wms 레이어 목록 정보를 담은 배열
     {   // shp 파일로 올린 레이어 (광주 GIS)
         name : "shp_test1",     // 레이어 관리를 위한 레이어 명칭
@@ -44,7 +44,7 @@ function mapSettingFn(obj) {
         target: "map_div",  // 지도가 그려질 영역
         layers: [
             new ol.layer.Tile({
-                source: new ol.source.OSM({
+                source: new ol.source.XYZ({
                     // 브이월드 API로 설정시 기본 제공하는 지도보다 자세한 정보를 확인 가능
                     // 인증키 발급 (만료일 : 2025-11-07)
                     url : "https://api.vworld.kr/req/wmts/1.0.0/CDD5436C-0C9D-3858-BC9C-C1A60F4673F9/Base/{z}/{y}/{x}.png"
@@ -122,45 +122,112 @@ function mapSettingFn(obj) {
             overlay.setPosition(coordinate);
 
         } else {
-            // 마커 스타일 정보를 담을 변수
-            let markerStyle;
+            // 만약 클릭한 지점에 feature 요소가 있다면 제거
+            let featureRemoveBool = map.forEachFeatureAtPixel(e.pixel, function (feature, layer) {
+                layer.getSource().removeFeature(feature);
+                return true;
+            });
+            // feature 요소를 지운게 있다면 새로운 feature 요소를 그리지 않고 종료
+            if(featureRemoveBool) {
+                return;
+            }
+
+            // 하나의 feature를 위한 벡터 셋팅
+            if(vectorSource == null) {
+                vectorSource = new ol.source.Vector();
+            }
+            // feature 스타일 정보를 담을 변수
+            let featureStyle;
             // feature 정보를 담을 변수
             let feature;
 
             // 클릭 이벤트가 마커 일 경우
             if(type === "markerOption") {
-                // 마커가 표시되기 위한 점 feature 정보 셋팅
+                // 마커가 표시되기 위한 feature 정보 셋팅
                 feature = new ol.Feature({
                     geometry: new ol.geom.Point([coordinate[0], coordinate[1]])
                 });
-                // 마커 스타일 설정
-                markerStyle = new ol.style.Style({
+                // feature 스타일 설정
+                featureStyle = new ol.style.Style({
                     image: new ol.style.Icon({  // 마커 이미지 설정
                         opacity: 1,  // 투명도 1 = 100%
                         scale: 0.03, // 크기 1 = 100%
                         src: '/resource/img/marker.png' // 마커 이미지 경로
                     })
                 });
+                // 좌표 셋팅 완료
+                coordinateSetBool = true;
 
-            // 클릭 이벤트가 선 일 경우
-            } else {
-                // 배열에 선을 그릴 좌표를 저장
-                LineStringArr.push([coordinate[0], coordinate[1]]);
-                // 선이 그려지기 위한 선 feature 정보 셋팅
-                feature = new ol.Feature({
-                    geometry: new ol.geom.LineString(LineStringArr)
-                });
+                // 클릭 이벤트가 선 일 경우
+            } else if(type === "lineOption") {
+                // 배열에 feature을 그릴 좌표를 저장
+                customFeatureArr.push([coordinate[0], coordinate[1]]);
+
+                // 하나의 선을 만들기 위한 2점이 마련 되었을 경우 선 정보 셋팅
+                if(customFeatureArr.length === 2) {
+                    // 선이 그려지기 위한 feature 정보 셋팅
+                    feature = new ol.Feature({
+                        geometry: new ol.geom.LineString(customFeatureArr)
+                    });
+                    // 좌표 배열 초기화
+                    customFeatureArr = [];
+                    // 좌표 셋팅 완료
+                    coordinateSetBool = true;
+                }
             }
-            // 벡터에 feature 정보 추가
-            vectorSource.addFeature(feature);
-            // 벡터 레이어 설정
-            vectorLayer = new ol.layer.Vector({
-                source: vectorSource,
-                // 마커스타일이 null 값이 아닐 경우 style 키값으로 markerStyle 추가
-                ...(markerStyle && {style : markerStyle})
-            });
-            // map에 벡터 레이어 추가
-            map.addLayer(vectorLayer);
+
+            // 클릭 이벤트가 원 일 경우
+            else if(type === "circleOption") {
+                // 원이 표시되기 위한 feature 정보 셋팅
+                feature = new ol.Feature({
+                    geometry: new ol.geom.Circle([coordinate[0], coordinate[1]], 600)
+                });
+                // feature 스타일 설정
+                featureStyle = new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'red',
+                        width: 2
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(0, 0, 255, 0.1)'
+                    })
+                });
+                // 좌표 셋팅 완료
+                coordinateSetBool = true;
+
+                // 클릭 이벤트가 폴리곤 일 경우
+            } else if(type === "polygonOption") {
+                // 배열에 feature을 그릴 좌표를 저장
+                customFeatureArr.push([coordinate[0], coordinate[1]]);
+
+                // 하나의 폴리곤을 만들기 위한 4점이 마련 되었을 경우 폴리곤 정보 셋팅
+                if(customFeatureArr.length === 4) {
+                    // 선이 그려지기 위한 feature 정보 셋팅
+                    feature = new ol.Feature({
+                        geometry: new ol.geom.Polygon([customFeatureArr])
+                    });
+                    // 좌표 배열 초기화
+                    customFeatureArr = [];
+                    // 좌표 셋팅 완료
+                    coordinateSetBool = true;
+                }
+            }
+            // feature 요소를 그리기위한 최종 좌표가 셋팅 완료 되었을 경우 레이어 추가
+            if(coordinateSetBool) {
+                // 벡터에 feature 정보 추가
+                vectorSource.addFeature(feature);
+                // 벡터 레이어 설정
+                let vectorLayer = new ol.layer.Vector({
+                    source: vectorSource,
+                    // feature 스타일이 null 값이 아닐 경우 style 키값으로 featureStyle 추가
+                    ...(featureStyle && {style : featureStyle})
+                });
+                // 다음 feature를 그릴 준비 하기 위해 벡터 초기화
+                vectorSource = null;
+                coordinateSetBool = false;
+                // map에 벡터 레이어 추가
+                map.addLayer(vectorLayer);
+            }
         }
     });
 
@@ -234,7 +301,7 @@ function wmsDisplayFn(obj) {
         // 특정 레이어 미표시
         if(type === "hide") {
             arr = selectWmsLayerObjFn(layersArray, name);
-        // 모든 레이어 미표시
+            // 모든 레이어 미표시
         } else {
             arr = selectWmsLayerObjFn(layersArray, null, false);
         }
@@ -278,13 +345,8 @@ function layerSettingFn(name) {
 function clickEventClearFn() {
     // 팝업 닫기 버튼 클릭 이벤트 실행
     $("#map_popup_closer").trigger("click");
-    // 화면에 표시 된 feature 레이어가 존재 할 경우
-    if(vectorLayer != null) {
-        // 모두 지우기
-        vectorLayer.getSource().clear();
-    }
     // 선 좌표 배열 초기화
-    LineStringArr = [];
+    customFeatureArr = [];
 }
 
 /** wms 레이어 목록중 찾고자 하는 레이어 목록 조회 **/
@@ -295,7 +357,7 @@ function selectWmsLayerObjFn(arr, name, bool=true) {
     // 동일한 명칭의 레이어를 찾고자 하는 경우
     if(bool) {
         result = arr.filter(x => x.name == null ? x.get("name") === name : x.name === name);
-    // 일치하지 않는 레이어를 찾고자 하는 경우
+        // 일치하지 않는 레이어를 찾고자 하는 경우
     } else {
         result = arr.filter(x => x.name == null ? x.get("name") != name : x.name != name);
     }

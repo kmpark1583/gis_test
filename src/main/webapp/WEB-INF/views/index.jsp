@@ -59,9 +59,11 @@
     <div>
         클릭 이벤트
         <select id="clickEventSelect" onchange="clickEventClearFn();">
-            <option value="popupOption">팝업</option>
+            <option value="popupOption" selected>팝업</option>
             <option value="markerOption">마커</option>
             <option value="lineOption">선</option>
+            <option value="circleOption">원</option>
+            <option value="polygonOption">폴리곤</option>
         </select>
     </div>
 </body>
